@@ -43,7 +43,7 @@ struct LoginView: View {
     private var topBar: some View {
         HStack(alignment: .center) {
             HStack(spacing: 0) {
-                Text("CampusMate")
+                Text("Avelo")
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
                     .foregroundStyle(StudydayTheme.ink)
                     .tracking(-0.4)

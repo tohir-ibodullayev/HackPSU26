@@ -15,9 +15,14 @@ struct ChatView: View {
                     ScrollViewReader { proxy in
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 14) {
-                                Label("Demo buddy · local replies", systemImage: "sparkles")
+                                Label(appModel.useGroq ? "Groq · fictional demo controls only" : "Demo buddy · local replies", systemImage: "sparkles")
                                     .font(.caption).foregroundStyle(StudydayTheme.muted)
                                     .frame(maxWidth: .infinity)
+                                Toggle("Use Groq for the fictional demo", isOn: $appModel.useGroq)
+                                    .font(.caption).disabled(appModel.isChatBusy)
+                                    .onChange(of: appModel.useGroq) { _, _ in appModel.saveBuddyMode() }
+                                Text("Profile text, memories and uploaded files stay local. Only coded fictional course controls and allowed interests are shared.")
+                                    .font(.caption2).foregroundStyle(StudydayTheme.muted)
                                 ForEach(appModel.messages) { message in
                                     ChatBubble(message: message)
                                         .id(message.id)
@@ -30,6 +35,7 @@ struct ChatView: View {
                             .padding(.horizontal, 16)
                             .padding(.vertical, 12)
                         }
+                        .onAppear { scrollToBottom(proxy: proxy) }
                         .onChange(of: appModel.messages.count) { _, _ in
                             scrollToBottom(proxy: proxy)
                         }
@@ -59,7 +65,7 @@ struct ChatView: View {
                     .focused($inputFocused)
                 }
             }
-            .navigationTitle("CampusMate")
+            .navigationTitle("Avelo")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -67,7 +73,7 @@ struct ChatView: View {
                         Image(systemName: "sparkles")
                             .foregroundStyle(StudydayTheme.accent)
                             .padding(.trailing, 8)
-                        Text("CampusMate")
+                        Text("Avelo")
                             .font(.system(size: 17, weight: .semibold, design: .rounded))
                             .foregroundStyle(StudydayTheme.ink)
                         Text(" · Buddy")
@@ -163,6 +169,7 @@ private struct ChatBubble: View {
                     ForEach(Array(message.cards.enumerated()), id: \.offset) { _, card in
                         BuddyCardView(card: card)
                     }
+                    if let source = message.responseSource { Text(source).font(.caption2).foregroundStyle(StudydayTheme.muted) }
                     Text(message.timestamp, style: .time)
                         .font(.caption2).foregroundStyle(StudydayTheme.muted)
                     if let file = message.attachedFileName {

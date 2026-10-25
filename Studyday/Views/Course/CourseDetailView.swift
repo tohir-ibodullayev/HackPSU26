@@ -113,6 +113,7 @@ struct GradeEntryView: View {
         NavigationStack {
             Form {
                 Section(assessment.title) {
+                    Text("Fictional demo scores only. Never enter actual student grades for cloud use.").font(.caption).foregroundStyle(.secondary)
                     TextField("Score as a percentage (0–100)", text: $score).keyboardType(.decimalPad)
                     Text("Enter percentage, not raw points. For 42 out of 50, enter 84.").font(.caption)
                     Text("Weight: \(assessment.weight, specifier: "%.0f")% of final grade")

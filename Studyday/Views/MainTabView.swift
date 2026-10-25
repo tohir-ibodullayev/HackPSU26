@@ -26,7 +26,7 @@ struct ProfileView: View {
         NavigationStack {
             Form {
                 Section {
-                    Label(appModel.profile.name.isEmpty ? "Your CampusMate" : appModel.profile.name, systemImage: "person.crop.circle.fill")
+                    Label(appModel.profile.name.isEmpty ? "Your Avelo" : appModel.profile.name, systemImage: "person.crop.circle.fill")
                         .font(.title2.bold())
                     Text(appModel.isDemo ? "Demo · saved on this device" : "Account session")
                         .font(.caption).foregroundStyle(StudydayTheme.muted)
@@ -75,7 +75,7 @@ struct ProfileView: View {
                     }
                     Button("Sign out", role: .destructive) { appModel.signOut() }
                 } footer: {
-                    Text("Demo chat, courses, and preferences are stored on this device. No Canvas sync or live AI is connected.")
+                    Text("Demo chat, courses, and preferences stay on this device. Optional Groq chat receives only permitted fictional controls and interest tags. Memories and uploaded files stay local. No Canvas sync.")
                 }
             }
             .scrollContentBackground(.hidden).background(StudydayBackground())
