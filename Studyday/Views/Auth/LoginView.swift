@@ -43,16 +43,16 @@ struct LoginView: View {
     private var topBar: some View {
         HStack(alignment: .center) {
             HStack(spacing: 0) {
-                Text("studyday")
-                    .font(.system(size: 25, weight: .semibold, design: .rounded))
+                Text("CampusMate")
+                    .font(.system(size: 22, weight: .semibold, design: .rounded))
                     .foregroundStyle(StudydayTheme.ink)
                     .tracking(-0.4)
                 Text("·")
-                    .font(.system(size: 25, weight: .semibold, design: .rounded))
+                    .font(.system(size: 22, weight: .semibold, design: .rounded))
                     .foregroundStyle(StudydayTheme.accent)
             }
             Spacer()
-            Text("A LITTLE LESS OVERWHELM")
+            Text("YOUR CAMPUS BUDDY")
                 .font(.system(size: 7, weight: .semibold, design: .rounded))
                 .tracking(0.8)
                 .foregroundStyle(StudydayTheme.sage)
@@ -98,7 +98,7 @@ struct LoginView: View {
                     .foregroundStyle(StudydayTheme.ink)
                     .lineSpacing(2)
 
-                Text("All your courses, deadlines, and next steps.\nOne calm place to begin.")
+                Text("A buddy for your goals, study days,\nand everything in between.")
                     .font(.system(size: 15, weight: .regular, design: .rounded))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(StudydayTheme.muted)
@@ -138,10 +138,10 @@ struct LoginView: View {
                     )
 
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("A clearer course")
+                    Text("A buddy in your corner")
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundStyle(StudydayTheme.ink)
-                    Text("Your syllabus, made manageable")
+                    Text("Your college journey, together")
                         .font(.system(size: 11, weight: .regular, design: .rounded))
                         .foregroundStyle(StudydayTheme.muted)
                 }
@@ -184,13 +184,13 @@ struct LoginView: View {
                 .frame(minHeight: 58)
                 .background(
                     RoundedRectangle(cornerRadius: StudydayTheme.corner, style: .continuous)
-                        .fill(StudydayTheme.ink)
+                        .fill(StudydayTheme.accent)
                 )
             }
             .buttonStyle(.plain)
 
             Button {
-                appModel.signIn(provider: .pennState)
+                appModel.beginDemo()
             } label: {
                 Text("Try the demo")
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
@@ -225,63 +225,82 @@ struct LoginView: View {
     }
 
     private var providerStack: some View {
-        VStack(spacing: 12) {
-            Text("Continue with")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+        VStack(spacing: 16) {
+            AccountForm()
+            Button("Back") { showProviders = false }
                 .foregroundStyle(StudydayTheme.muted)
-
-            ForEach(AuthProvider.allCases) { provider in
-                Button {
-                    appModel.signIn(provider: provider)
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: provider.systemImage)
-                            .font(.system(size: 17, weight: .semibold))
-                            .frame(width: 22)
-                        Text(provider.title)
-                            .font(.system(size: 16, weight: .semibold, design: .rounded))
-                        Spacer()
-                        if appModel.isAuthenticating {
-                            ProgressView().tint(provider == .apple ? .white : StudydayTheme.ink)
-                        }
-                    }
-                    .foregroundStyle(provider == .apple ? Color.white : StudydayTheme.ink)
-                    .padding(.horizontal, 18)
-                    .frame(minHeight: 58)
-                    .background(
-                        RoundedRectangle(cornerRadius: StudydayTheme.corner, style: .continuous)
-                            .fill(provider == .apple ? StudydayTheme.ink : StudydayTheme.paperElevated)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: StudydayTheme.corner, style: .continuous)
-                            .stroke(provider == .apple ? Color.clear : StudydayTheme.border, lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(appModel.isAuthenticating)
-            }
-
-            Button {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.9)) {
-                    showProviders = false
-                }
-            } label: {
-                Text("Back")
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                    .foregroundStyle(StudydayTheme.muted)
-            }
-            .buttonStyle(.plain)
-            .padding(.top, 4)
-
-            Text("Demo mode — sign-in is mocked. No network required.")
-                .font(.system(size: 11, design: .rounded))
-                .foregroundStyle(StudydayTheme.muted)
-                .multilineTextAlignment(.center)
         }
     }
 }
 
-#Preview {
-    LoginView()
-        .environmentObject(AppModel())
+private struct AccountForm: View {
+    @EnvironmentObject private var appModel: AppModel
+    @State private var creating = true
+    @State private var name = ""
+    @State private var email = ""
+    @State private var password = ""
+    @State private var confirmation = ""
+    @State private var error: String?
+    @State private var recovery: String?
+    private var validEmail: Bool {
+        let parts = email.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "@", omittingEmptySubsequences: false)
+        return parts.count == 2 && !parts[0].isEmpty && parts[1].contains(".") && !email.contains(where: { $0.isWhitespace })
+    }
+    var body: some View {
+        VStack(spacing: 14) {
+            Picker("Account", selection: $creating) {
+                Text("Sign up").tag(true)
+                Text("Log in").tag(false)
+            }.pickerStyle(.segmented)
+            Text(creating ? "Make room for a lighter semester." : "Good to see you again.")
+                .font(.headline)
+            if creating {
+                TextField("Your name", text: $name).textContentType(.name)
+            }
+            TextField("Email address", text: $email)
+                .keyboardType(.emailAddress).textContentType(.emailAddress)
+                .textInputAutocapitalization(.never).autocorrectionDisabled()
+            SecureField("Password", text: $password)
+                .textContentType(creating ? .newPassword : .password)
+            if creating {
+                SecureField("Confirm password", text: $confirmation).textContentType(.newPassword)
+            }
+            if let error = error ?? appModel.authError {
+                Text(error).font(.footnote).foregroundStyle(StudydayTheme.danger)
+                    .accessibilityIdentifier("authError")
+            }
+            Button {
+                error = nil; appModel.authError = nil
+                guard validEmail else { error = "Enter a valid email address."; return }
+                guard !creating || !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { error = "Enter your name."; return }
+                guard password.count >= (creating ? 8 : 1) else { error = "Use at least 8 characters for your password."; return }
+                guard !creating || confirmation == password else { error = "Passwords don’t match."; return }
+                Task {
+                    await appModel.authenticate(name: name, email: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password, creating: creating)
+                    password = ""; confirmation = ""
+                }
+            } label: {
+                HStack {
+                    if appModel.isAuthenticating { ProgressView().tint(.white) }
+                    Text(creating ? "Create account" : "Log in")
+                }.frame(maxWidth: .infinity).padding(16)
+                    .foregroundStyle(.white).background(StudydayTheme.accent, in: RoundedRectangle(cornerRadius: 18))
+            }.disabled(appModel.isAuthenticating)
+            if !creating {
+                Button("Forgot password?") {
+                    guard validEmail else { error = "Enter your email address first."; return }
+                    Task { recovery = await appModel.resetPassword(email: email) }
+                }
+            }
+            if let recovery { Text(recovery).font(.footnote).foregroundStyle(StudydayTheme.muted) }
+            Text("Account services aren’t connected yet. No real account will be created. Passwords are never saved by this prototype.")
+                .font(.caption).foregroundStyle(StudydayTheme.muted)
+            Button("Try the demo instead") { password = ""; confirmation = ""; appModel.beginDemo() }
+                .fontWeight(.semibold)
+        }
+        .textFieldStyle(.roundedBorder)
+        .padding(18)
+        .background(StudydayTheme.paperElevated, in: RoundedRectangle(cornerRadius: 22))
+        .onChange(of: creating) { _, _ in error = nil; appModel.authError = nil; recovery = nil; password = ""; confirmation = "" }
+    }
 }

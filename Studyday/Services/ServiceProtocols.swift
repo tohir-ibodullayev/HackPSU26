@@ -1,19 +1,16 @@
 import Foundation
 
-/// Plug real OAuth / campus SSO behind this protocol later.
+/// Implement with a real auth provider; never persist passwords in app state.
 protocol AuthServiceProtocol {
-    func signIn(provider: AuthProvider) async throws -> UserSession
+    func signIn(email: String, password: String) async throws -> UserSession
+    func signUp(name: String, email: String, password: String) async throws -> UserSession
+    func resetPassword(email: String) async throws
     func signOut() async
 }
 
 /// Stand-in for Apple Intelligence / on-device syllabus parsing.
 protocol SyllabusExtractorProtocol {
     func extract(from fileName: String, fileDataHint: Data?) async throws -> ExtractedSyllabus
-}
-
-/// Stand-in for the friend's LLM / chat backend.
-protocol ChatServiceProtocol {
-    func reply(to userMessage: String, syllabus: ExtractedSyllabus?) async throws -> String
 }
 
 enum ServiceError: LocalizedError {

@@ -22,6 +22,28 @@ struct CourseEditView: View {
                     TextField("Location", text: $draft.location)
                 }
 
+                Section("Individual assessment weights") {
+                    Text("Enter each assessment’s share of the final grade. Weights must total 100%; do not double-count category totals and their individual assignments.")
+                        .font(.caption)
+                    ForEach($draft.assessments) { $item in
+                        VStack(alignment: .leading) {
+                            TextField("Assessment name", text: $item.title)
+                            HStack {
+                                Text("Final grade weight (%)")
+                                TextField("Weight", value: $item.weight, format: .number)
+                                    .keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+                            }
+                        }
+                    }.onDelete { draft.assessments.remove(atOffsets: $0) }
+                    Button("Add assessment") { draft.assessments.append(Assessment(title: "New assessment", weight: 0)) }
+                    if !LocalGradeCalculator().summarize(draft).valid {
+                        Text("No grade estimates until all weights are valid and total 100%.")
+                            .font(.caption).foregroundStyle(StudydayTheme.danger)
+                    }
+                }
+                Section("Syllabus policies") {
+                    TextField("Grading, late work, and other policies", text: $draft.policies, axis: .vertical)
+                }
                 Section("Exams") {
                     taskEditor(kind: .exams)
                 }

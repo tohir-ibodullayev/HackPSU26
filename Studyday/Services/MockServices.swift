@@ -1,36 +1,6 @@
 import Foundation
 
-/// Local stub auth — no network. Friend can swap for real OAuth later.
-final class MockAuthService: AuthServiceProtocol {
-    func signIn(provider: AuthProvider) async throws -> UserSession {
-        try await Task.sleep(nanoseconds: 700_000_000)
-        let name: String
-        let email: String
-        switch provider {
-        case .gmail:
-            name = "Tohirjon"
-            email = "tohirjon@gmail.com"
-        case .pennState:
-            name = "Tohirjon Ibodullayev"
-            email = "tzi5073@psu.edu"
-        case .apple:
-            name = "Tohirjon"
-            email = "tohirjon@icloud.com"
-        }
-        return UserSession(
-            id: UUID().uuidString,
-            displayName: name,
-            email: email,
-            provider: provider
-        )
-    }
-
-    func signOut() async {
-        try? await Task.sleep(nanoseconds: 150_000_000)
-    }
-}
-
-/// Mock “Apple Intelligence” syllabus extraction — deterministic sample fields.
+/// Filename-based sample extraction. File content is never read or verified.
 final class MockSyllabusExtractor: SyllabusExtractorProtocol {
     func extract(from fileName: String, fileDataHint: Data?) async throws -> ExtractedSyllabus {
         try await Task.sleep(nanoseconds: 1_100_000_000)
@@ -110,39 +80,48 @@ final class MockSyllabusExtractor: SyllabusExtractorProtocol {
     }
 }
 
-final class MockChatService: ChatServiceProtocol {
-    func reply(to userMessage: String, syllabus: ExtractedSyllabus?) async throws -> String {
-        try await Task.sleep(nanoseconds: 650_000_000)
-
-        if let syllabus {
-            let examCount = syllabus.exams.count
-            let quizCount = syllabus.quizzes.count
-            let assignmentCount = syllabus.assignments.count
-            return """
-            Got it — I pulled key details from your syllabus for **\(syllabus.code): \(syllabus.title)**.
-
-            • Instructor: \(syllabus.instructor)
-            • Term: \(syllabus.term)
-            • Meets: \(syllabus.meetingTimes) · \(syllabus.location)
-            • Found \(examCount) exam(s), \(quizCount) quiz(zes), and \(assignmentCount) assignment(s)
-
-            I added this course to Home. You can open it to review exams, quizzes, and assignments, or tap Edit if anything looks off.
-            """
+struct MockBuddyService: BuddyServiceProtocol {
+    func reply(to text: String, context: BuddyContext) async throws -> BuddyReply {
+        try await Task.sleep(nanoseconds: 300_000_000)
+        let lower = text.lowercased()
+        if lower.contains("remember") || lower.contains("memory") {
+            let memories = context.profile.memories.map { "• " + $0.text }.joined(separator: "\n")
+            return BuddyReply(text: memories.isEmpty ? "You haven’t saved any personal memories yet. Add, edit, or delete them in Me — you decide what stays." : "Here’s what you chose to save:\n" + memories + "\nYou can edit or delete any of these in Me.")
         }
-
-        let trimmed = userMessage.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            return "I'm here when you're ready. Attach a syllabus with **+ Add syllabus**, or ask me anything about your courses."
+        if lower.contains("grade") || lower.contains("doing") || lower.contains("calc") {
+            let matching = context.courses.filter { lower.contains($0.code.lowercased()) }
+            let courses = matching.isEmpty ? context.courses : matching
+            return BuddyReply(text: "Let’s look at what you’ve entered. These are recorded results, not a synced Canvas average. Open a card to update your goal or try a scenario.", cards: courses.map {
+                .grade(courseID: $0.id, code: $0.code, result: LocalGradeCalculator().summarize($0))
+            })
         }
-
-        if trimmed.lowercased().contains("hello") || trimmed.lowercased().contains("hi") {
-            return "Hey! Drop a syllabus with **+ Add syllabus** and I’ll extract the schedule, then add the course to Home."
+        if let event = context.events.first(where: { lower.contains($0.title.lowercased()) }) {
+            return BuddyReply(text: "This fictional demo event could be a fun break. Check the time and location below. Want to make a study plan around it?", cards: [.event(event)])
         }
-
-        return """
-        (Mock LLM) Thanks — once your friend’s API is wired up, answers will use your real course context.
-
-        For now, try attaching a syllabus PDF/DOC so I can extract exams, quizzes, and assignments.
-        """
+        if lower.contains("event") || lower.contains("campus") {
+            return BuddyReply(text: "Here’s a fictional campus pick to explore. Discover has more demo events.", cards: context.events.prefix(1).map { .event($0) })
+        }
+        if lower.contains("goal") {
+            return BuddyReply(text: "Small steps count. You can update what matters to you in Me.", cards: [.goal(context.profile.goal.isEmpty ? "Set your academic goal in Me." : context.profile.goal)])
+        }
+        if lower.contains("study") || lower.contains("exam") {
+            let course = context.courses.first
+            return BuddyReply(text: "Let’s start small\(context.profile.name.isEmpty ? "" : ", " + context.profile.name). Pick one topic\(course.map { " from " + $0.code } ?? ""), spend 20 minutes on practice questions, then take a five-minute break. Which topic feels hardest?")
+        }
+        return BuddyReply(text: "I’m here for your college journey. In this prototype I can show your entered grades, help outline a study session, and explore demo campus events. What would help right now?")
     }
+}
+
+/// No fake account creation: inject your teammate's provider to enable real email auth.
+struct UnconfiguredAuthService: AuthServiceProtocol {
+    func signIn(email: String, password: String) async throws -> UserSession {
+        throw ServiceError.unavailable("Account sign-in isn’t connected yet. Use Try the demo to explore CampusMate.")
+    }
+    func signUp(name: String, email: String, password: String) async throws -> UserSession {
+        throw ServiceError.unavailable("Account creation isn’t connected yet. No account was created. Try the demo for now.")
+    }
+    func resetPassword(email: String) async throws {
+        throw ServiceError.unavailable("Password recovery isn’t connected yet. No reset email was sent.")
+    }
+    func signOut() async {}
 }

@@ -3,158 +3,172 @@ import SwiftUI
 struct CourseDetailView: View {
     @EnvironmentObject private var appModel: AppModel
     let courseID: String
-
-    @State private var segment: TaskSegment = .exams
     @State private var showEdit = false
-
-    private var course: CourseItem? {
-        appModel.courses.first { $0.id == courseID }
-    }
-
+    @State private var grading: Assessment?
+    @State private var scenario = 85.0
+    @State private var confirmDelete = false
+    @Environment(\.dismiss) private var dismiss
+    private var course: CourseItem? { appModel.courses.first { $0.id == courseID } }
     var body: some View {
         Group {
             if let course {
-                content(course)
-            } else {
-                ContentUnavailableView("Course removed", systemImage: "trash")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func content(_ course: CourseItem) -> some View {
-        ZStack {
-            StudydayBackground()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    header(course)
-
-                    Picker("Section", selection: $segment) {
-                        ForEach(TaskSegment.allCases) { seg in
-                            Text(seg.title).tag(seg)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(course.title).font(.system(size: 28, weight: .semibold, design: .rounded))
+                            Text(course.isDemo ? "Demo course · example weights and deadlines" : course.term)
+                                .font(.caption).foregroundStyle(StudydayTheme.muted)
                         }
-                    }
-                    .pickerStyle(.segmented)
-
-                    taskList(for: course)
-                }
-                .padding(16)
-            }
-        }
-        .navigationTitle(course.code)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Edit") { showEdit = true }
-            }
-        }
-        .sheet(isPresented: $showEdit) {
-            CourseEditView(course: course) { updated in
-                appModel.updateCourse(updated)
-            }
-        }
-    }
-
-    private func header(_ course: CourseItem) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(course.title)
-                .font(.system(size: 24, weight: .semibold, design: .rounded))
-                .foregroundStyle(StudydayTheme.ink)
-            Label(course.instructor, systemImage: "person.fill")
-            Label(course.term, systemImage: "calendar")
-            Label(course.meetingTimes, systemImage: "clock")
-            Label(course.location, systemImage: "mappin.and.ellipse")
-        }
-        .font(.subheadline)
-        .foregroundStyle(StudydayTheme.muted)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: StudydayTheme.cornerCard, style: .continuous)
-                .fill(StudydayTheme.paperElevated)
-                .overlay(
-                    RoundedRectangle(cornerRadius: StudydayTheme.cornerCard, style: .continuous)
-                        .stroke(StudydayTheme.border, lineWidth: 1)
-                )
-        )
-    }
-
-    @ViewBuilder
-    private func taskList(for course: CourseItem) -> some View {
-        let items = tasks(for: course)
-        if items.isEmpty {
-            Text("Nothing listed for \(segment.title.lowercased()) yet. Use Edit to add them.")
-                .font(.subheadline)
-                .foregroundStyle(StudydayTheme.muted)
-                .padding(.vertical, 24)
-                .frame(maxWidth: .infinity)
-        } else {
-            VStack(spacing: 10) {
-                ForEach(items) { task in
-                    HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: segment.icon)
-                            .foregroundStyle(StudydayTheme.accent)
-                            .frame(width: 22)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(task.title)
-                                .font(.system(size: 16, weight: .semibold, design: .rounded))
-                                .foregroundStyle(StudydayTheme.ink)
-                            if let due = task.dueDate {
-                                Text(due, style: .date)
-                                    .font(.caption)
-                                    .foregroundStyle(StudydayTheme.muted)
+                        VStack(alignment: .leading, spacing: 12) {
+                            Picker("Target grade", selection: Binding(get: { course.target }, set: { appModel.setTarget($0, courseID: courseID) })) {
+                                ForEach(TargetGrade.allCases) { target in
+                                    Text("\(target.rawValue) · \(target.threshold, specifier: "%.0f")%").tag(target)
+                                }
                             }
-                            if !task.notes.isEmpty {
-                                Text(task.notes)
-                                    .font(.caption)
-                                    .foregroundStyle(StudydayTheme.muted)
+                            Text("Prototype letter thresholds. Confirm your instructor’s grading scale.").font(.caption).foregroundStyle(StudydayTheme.muted)
+                        }.campusCard()
+                        GradeResultView(code: course.code, result: appModel.summary(course))
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text("Assessment weights & grades").font(.headline)
+                            Text("Each row is a share of the final course grade. Enter category totals only when that entire category is graded.").font(.caption).foregroundStyle(StudydayTheme.muted)
+                            ForEach(course.assessments) { item in
+                                Button { grading = item } label: {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(item.title).font(.subheadline.bold())
+                                            Text("\(item.weight, specifier: "%.0f")% of final grade").font(.caption).foregroundStyle(StudydayTheme.muted)
+                                        }
+                                        Spacer()
+                                        if let score = item.score { Text("\(score, specifier: "%.1f")%") }
+                                        else { Text("Add grade").foregroundStyle(StudydayTheme.accent) }
+                                    }.padding(.vertical, 6)
+                                }.buttonStyle(.plain)
                             }
-                        }
-                        Spacer()
-                    }
-                    .padding(14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(StudydayTheme.paperElevated)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(StudydayTheme.border, lineWidth: 1)
-                            )
-                    )
+                            if course.assessments.isEmpty { Text("No assessment weights yet. Use Edit to enter the full weighting from your syllabus.").font(.subheadline) }
+                            Button("Add Grade") { grading = course.assessments.first }
+                                .buttonStyle(.bordered).disabled(course.assessments.isEmpty)
+                        }.campusCard()
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("What if…").font(.headline)
+                            Text("I average \(scenario, specifier: "%.0f")% on all remaining work.").font(.subheadline)
+                            Slider(value: $scenario, in: 0...100, step: 1).accessibilityLabel("Remaining work score")
+                            if let result = appModel.summary(course).projectedFinal(remainingScore: scenario) {
+                                Text("Projected final: \(result, specifier: "%.1f")%")
+                                    .font(.title3.bold())
+                                Text("A scenario, not an entered grade or prediction.").font(.caption).foregroundStyle(StudydayTheme.muted)
+                            } else { Text("Enter a grade and valid assessment weights to try a scenario.").font(.caption) }
+                        }.campusCard()
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Important syllabus policies").font(.headline)
+                            Text(course.policies).font(.subheadline).foregroundStyle(StudydayTheme.muted)
+                        }.campusCard()
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Deadlines").font(.headline)
+                            ForEach(course.exams + course.quizzes + course.assignments) { task in
+                                HStack {
+                                    VStack(alignment: .leading) {
+                                        Text(task.title)
+                                        if !task.notes.isEmpty { Text(task.notes).font(.caption).foregroundStyle(StudydayTheme.muted) }
+                                    }
+                                    Spacer()
+                                    if let due = task.dueDate { Text(due, style: .date).font(.caption) }
+                                }
+                            }
+                        }.campusCard()
+                        Button("Ask Buddy about my grades") {
+                            appModel.selectedTab = .chat
+                            appModel.sendUserText("How am I doing in \(course.code)? Show my grades.")
+                        }.buttonStyle(.borderedProminent).disabled(appModel.isChatBusy)
+                        Button("Remove course", role: .destructive) { confirmDelete = true }
+                    }.padding(16)
+                }.background(StudydayBackground())
+                .navigationTitle(course.code).navigationBarTitleDisplayMode(.inline)
+                .toolbar { Button("Edit") { showEdit = true } }
+                .sheet(isPresented: $showEdit) {
+                    CourseEditView(course: course) { appModel.updateCourse($0) }
                 }
-            }
-        }
-    }
-
-    private func tasks(for course: CourseItem) -> [CourseTask] {
-        switch segment {
-        case .exams: return course.exams
-        case .quizzes: return course.quizzes
-        case .assignments: return course.assignments
+                .sheet(item: $grading) { item in
+                    GradeEntryView(courseID: courseID, assessment: item)
+                }
+                .confirmationDialog("Remove this course and its grades?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                    Button("Remove course", role: .destructive) { appModel.deleteCourse(course); dismiss() }
+                }
+            } else { ContentUnavailableView("Course unavailable", systemImage: "book.closed") }
         }
     }
 }
 
-enum TaskSegment: String, CaseIterable, Identifiable {
-    case exams
-    case quizzes
-    case assignments
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .exams: return "Exams"
-        case .quizzes: return "Quizzes"
-        case .assignments: return "Assignments"
-        }
+struct GradeEntryView: View {
+    @EnvironmentObject private var appModel: AppModel
+    @Environment(\.dismiss) private var dismiss
+    let courseID: String
+    let assessment: Assessment
+    @State private var score: String
+    @State private var error: String?
+    init(courseID: String, assessment: Assessment) {
+        self.courseID = courseID; self.assessment = assessment
+        _score = State(initialValue: assessment.score.map { String($0) } ?? "")
     }
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section(assessment.title) {
+                    TextField("Score as a percentage (0–100)", text: $score).keyboardType(.decimalPad)
+                    Text("Enter percentage, not raw points. For 42 out of 50, enter 84.").font(.caption)
+                    Text("Weight: \(assessment.weight, specifier: "%.0f")% of final grade")
+                    if let error { Text(error).foregroundStyle(StudydayTheme.danger) }
+                }
+                if assessment.score != nil {
+                    Button("Remove entered grade", role: .destructive) {
+                        if appModel.setScore(nil, assessmentID: assessment.id, courseID: courseID) { dismiss() }
+                    }
+                }
+            }
+            .navigationTitle("Add Grade").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        let cleaned = score.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
+                        guard let value = Double(cleaned), value.isFinite, (0...100).contains(value) else { error = "Enter a percentage between 0 and 100."; return }
+                        if appModel.setScore(value, assessmentID: assessment.id, courseID: courseID) { dismiss() }
+                        else { error = "This assessment is no longer available." }
+                    }
+                }
+            }
+        }.presentationDetents([.medium, .large])
+    }
+}
 
-    var icon: String {
-        switch self {
-        case .exams: return "graduationcap.fill"
-        case .quizzes: return "questionmark.circle.fill"
-        case .assignments: return "checklist"
-        }
+struct GradeResultView: View {
+    let code: String
+    let result: GradeSummary
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label(code, systemImage: "chart.bar.xaxis").font(.headline)
+                Spacer()
+                Text("Target \(result.target, specifier: "%.0f")%").font(.caption.bold())
+            }
+            Text(result.status).font(.system(.title3, design: .rounded).weight(.semibold))
+                .foregroundStyle(result.atRisk ? StudydayTheme.danger : StudydayTheme.ink)
+            if !result.valid {
+                Text("Assessment weights must be positive and total 100%. No reliable grade estimate is available yet.")
+            } else if let average = result.recordedAverage {
+                Text("\(average, specifier: "%.1f")% on entered work")
+                Text("Based on \(result.completedWeight, specifier: "%.0f")% of the course. This is not your final average.")
+                    .font(.caption).foregroundStyle(StudydayTheme.muted)
+                if let maximum = result.maximumPossible {
+                    Text("Maximum possible final: \(maximum, specifier: "%.1f")%")
+                }
+                if let required = result.requiredRemaining {
+                    Text(required > 100 ? "The goal requires more than 100% on remaining work." : String(format: "Need %.1f%% on remaining work to reach the target.", required))
+                        .font(.caption)
+                }
+            } else {
+                Text("No scores entered. Your current grade is unknown.")
+            }
+            Text("Assumes fixed weights, no curves, drops, rounding, or extra credit.").font(.caption2).foregroundStyle(StudydayTheme.muted)
+        }.font(.subheadline).campusCard()
     }
 }

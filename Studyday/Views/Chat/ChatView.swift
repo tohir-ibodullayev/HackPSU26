@@ -15,6 +15,9 @@ struct ChatView: View {
                     ScrollViewReader { proxy in
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 14) {
+                                Label("Demo buddy · local replies", systemImage: "sparkles")
+                                    .font(.caption).foregroundStyle(StudydayTheme.muted)
+                                    .frame(maxWidth: .infinity)
                                 ForEach(appModel.messages) { message in
                                     ChatBubble(message: message)
                                         .id(message.id)
@@ -35,6 +38,18 @@ struct ChatView: View {
                         }
                     }
 
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(["Show my grades", "Let’s study", "My goals", "Campus events"], id: \.self) { reply in
+                                Button(reply) { appModel.sendUserText(reply) }
+                                    .font(.caption.weight(.medium)).buttonStyle(.bordered)
+                                    .tint(StudydayTheme.accent).disabled(appModel.isChatBusy)
+                            }
+                        }.padding(.horizontal, 14).padding(.vertical, 6)
+                    }
+                    if let error = appModel.chatError {
+                        Text(error).font(.caption).foregroundStyle(StudydayTheme.danger).padding(.horizontal)
+                    }
                     ComposerBar(
                         draft: $draft,
                         isBusy: appModel.isChatBusy,
@@ -44,15 +59,18 @@ struct ChatView: View {
                     .focused($inputFocused)
                 }
             }
-            .navigationTitle("studyday")
+            .navigationTitle("CampusMate")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 0) {
-                        Text("studyday")
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(StudydayTheme.accent)
+                            .padding(.trailing, 8)
+                        Text("CampusMate")
                             .font(.system(size: 17, weight: .semibold, design: .rounded))
                             .foregroundStyle(StudydayTheme.ink)
-                        Text("·")
+                        Text(" · Buddy")
                             .font(.system(size: 17, weight: .semibold, design: .rounded))
                             .foregroundStyle(StudydayTheme.accent)
                     }
@@ -80,7 +98,7 @@ struct ChatView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("File picker is mocked. Choose a sample — extraction is stubbed locally.")
+                Text("Choose a demo syllabus. These create fictional course details, not verified extracted data. Import your own file from Academics.")
             }
         }
     }
@@ -105,6 +123,7 @@ struct ChatView: View {
 }
 
 private struct ChatBubble: View {
+    @EnvironmentObject private var appModel: AppModel
     let message: ChatMessage
 
     var body: some View {
@@ -112,6 +131,10 @@ private struct ChatBubble: View {
             if message.role == .user { Spacer(minLength: 48) }
 
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 6) {
+                if message.proactive {
+                    Label("A little heads-up · Buddy reminder", systemImage: "sparkles")
+                        .font(.caption.weight(.semibold)).foregroundStyle(StudydayTheme.accent)
+                }
                 if message.role == .system {
                     Text(message.text)
                         .font(.system(size: 12, weight: .medium, design: .rounded))
@@ -127,7 +150,7 @@ private struct ChatBubble: View {
                         .padding(.vertical, 12)
                         .background(
                             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(message.role == .user ? StudydayTheme.ink : StudydayTheme.paperElevated)
+                                .fill(message.role == .user ? StudydayTheme.accent : StudydayTheme.paperElevated)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                                         .stroke(
@@ -137,6 +160,11 @@ private struct ChatBubble: View {
                                 )
                         )
 
+                    ForEach(Array(message.cards.enumerated()), id: \.offset) { _, card in
+                        BuddyCardView(card: card)
+                    }
+                    Text(message.timestamp, style: .time)
+                        .font(.caption2).foregroundStyle(StudydayTheme.muted)
                     if let file = message.attachedFileName {
                         Label(file, systemImage: "doc.fill")
                             .font(.caption)
@@ -192,7 +220,7 @@ private struct ComposerBar: View {
                 HStack(spacing: 4) {
                     Image(systemName: "plus")
                         .font(.system(size: 14, weight: .bold))
-                    Text("Add syllabus")
+                    Text("Syllabus")
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
                 }
                 .foregroundStyle(StudydayTheme.ink)
@@ -209,7 +237,7 @@ private struct ComposerBar: View {
             .accessibilityLabel("Add syllabus")
 
             HStack(spacing: 8) {
-                TextField("Ask Studyday…", text: $draft, axis: .vertical)
+                TextField("Message Buddy…", text: $draft, axis: .vertical)
                     .lineLimit(1...5)
                     .textFieldStyle(.plain)
                     .font(.system(size: 16, design: .rounded))
@@ -221,7 +249,7 @@ private struct ComposerBar: View {
                         .frame(width: 34, height: 34)
                         .background(
                             Circle()
-                                .fill(canSend ? StudydayTheme.ink : StudydayTheme.chipFill)
+                                .fill(canSend ? StudydayTheme.accent : StudydayTheme.chipFill)
                         )
                 }
                 .buttonStyle(.plain)
@@ -253,4 +281,37 @@ private struct ComposerBar: View {
 #Preview {
     ChatView()
         .environmentObject(AppModel())
+}
+
+/// Cards carry snapshots so a historical Buddy statement stays consistent with its result.
+private struct BuddyCardView: View {
+    @EnvironmentObject private var appModel: AppModel
+    let card: BuddyCard
+    var body: some View {
+        switch card {
+        case .grade(let courseID, let code, let result):
+            NavigationLink {
+                CourseDetailView(courseID: courseID)
+            } label: {
+                VStack(alignment: .leading, spacing: 8) {
+                    GradeResultView(code: code, result: result)
+                    Label("Review grades & what-if", systemImage: "arrow.right")
+                        .font(.caption.weight(.semibold)).foregroundStyle(StudydayTheme.accent)
+                    Text("Snapshot at message time").font(.caption2).foregroundStyle(StudydayTheme.muted)
+                }
+            }.buttonStyle(.plain)
+        case .event(let event):
+            NavigationLink { EventDetailView(event: event) } label: {
+                EventSummaryView(event: event).campusCard()
+            }.buttonStyle(.plain)
+        case .goal(let goal):
+            Button { appModel.selectedTab = .profile } label: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Your academic goal", systemImage: "scope").font(.caption.bold()).foregroundStyle(StudydayTheme.accent)
+                    Text(goal).font(.headline).foregroundStyle(StudydayTheme.ink)
+                    Text("Edit in Me →").font(.caption).foregroundStyle(StudydayTheme.muted)
+                }.campusCard()
+            }.buttonStyle(.plain)
+        }
+    }
 }

@@ -1,172 +1,73 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct HomeView: View {
     @EnvironmentObject private var appModel: AppModel
-
+    @State private var showSamples = false
+    @State private var importing = false
+    @State private var importError: String?
     var body: some View {
         NavigationStack {
-            ZStack {
-                StudydayBackground()
-
-                if appModel.courses.isEmpty {
-                    emptyState
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 14) {
-                            headerBlurb
-                            ForEach(appModel.courses) { course in
-                                NavigationLink(value: course) {
-                                    CourseRow(course: course)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Small steps. Real progress.")
+                        .font(.system(size: 28, weight: .semibold, design: .rounded))
+                    Text("Grades are entered by you. Nothing is synced from Canvas. Demo courses and weights are examples; verify your own syllabus.")
+                        .font(.subheadline).foregroundStyle(StudydayTheme.muted)
+                    if appModel.courses.isEmpty {
+                        ContentUnavailableView("Your semester starts here", systemImage: "book.closed", description: Text("Import a syllabus or add a demo course to explore grade goals."))
+                    }
+                    ForEach(appModel.courses) { course in
+                        NavigationLink { CourseDetailView(courseID: course.id) } label: {
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack {
+                                    Text(course.code).font(.caption.bold()).foregroundStyle(StudydayTheme.accent)
+                                    Spacer()
+                                    if course.isDemo { Text("DEMO").font(.caption2.bold()).foregroundStyle(StudydayTheme.muted) }
+                                    Image(systemName: "chevron.right").font(.caption)
                                 }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(16)
+                                Text(course.title).font(.system(.title3, design: .rounded).weight(.semibold))
+                                Text("Target \(course.target.rawValue) · \(course.target.threshold, specifier: "%.0f")%")
+                                if let average = appModel.summary(course).recordedAverage {
+                                    Text("\(average, specifier: "%.1f")% on entered work · \(appModel.summary(course).completedWeight, specifier: "%.0f")% of course")
+                                        .font(.caption).foregroundStyle(StudydayTheme.muted)
+                                } else {
+                                    Text("Current grade unknown").font(.caption).foregroundStyle(StudydayTheme.muted)
+                                }
+                                Text(appModel.summary(course).status).font(.subheadline).foregroundStyle(StudydayTheme.muted)
+                            }.campusCard()
+                        }.buttonStyle(.plain)
                     }
-                }
-            }
-            .navigationTitle("Home")
-            .navigationDestination(for: CourseItem.self) { course in
-                CourseDetailView(courseID: course.id)
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        appModel.selectedTab = .chat
-                    } label: {
-                        Image(systemName: "plus.bubble")
-                            .foregroundStyle(StudydayTheme.accent)
+                    Text("Coming up").font(.title3.bold())
+                    let upcoming = appModel.courses.flatMap { c in (c.exams + c.quizzes + c.assignments).map { (c.code, $0) } }
+                        .filter { $0.1.dueDate.map { $0 >= Calendar.current.startOfDay(for: Date()) } ?? false }
+                        .sorted { ($0.1.dueDate ?? .distantFuture) < ($1.1.dueDate ?? .distantFuture) }
+                    if upcoming.isEmpty { Text("No upcoming deadlines entered.").foregroundStyle(StudydayTheme.muted) }
+                    ForEach(Array(upcoming.prefix(8).enumerated()), id: \.offset) { _, entry in
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("\(entry.0) · \(entry.1.title)").font(.headline)
+                            if let date = entry.1.dueDate { Text(date, style: .date).font(.caption).foregroundStyle(StudydayTheme.muted) }
+                            if !entry.1.notes.isEmpty { Text(entry.1.notes).font(.caption).foregroundStyle(StudydayTheme.muted) }
+                        }.campusCard()
                     }
-                    .accessibilityLabel("Open AI chat to add syllabus")
-                }
+                    Button("Import syllabus (demo extraction)") { importing = true }.buttonStyle(.borderedProminent)
+                    Button("Try a sample syllabus") { showSamples = true }.buttonStyle(.bordered)
+                    if let error = importError ?? appModel.chatError { Text(error).font(.footnote).foregroundStyle(StudydayTheme.danger) }
+                }.padding(16)
+            }.background(StudydayBackground())
+            .navigationTitle("Academics")
+            .confirmationDialog("Add sample course", isPresented: $showSamples, titleVisibility: .visible) {
+                Button("MATH 141 sample") { appModel.attachSyllabus(fileName: "MATH141_sample.pdf") }
+                Button("CMPSC 221 sample") { appModel.attachSyllabus(fileName: "CMPSC221_sample.pdf") }
+            } message: { Text("Sample extraction creates fictional course details. It does not infer any grades.") }
+            .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf, .plainText], allowsMultipleSelection: false) { result in
+                do {
+                    guard let url = try result.get().first else { return }
+                    // Filename-only mock: do not read or upload a student's actual document.
+                    appModel.attachSyllabus(fileName: url.lastPathComponent)
+                    importError = nil
+                } catch { importError = "The file couldn’t be selected. Please try again." }
             }
         }
     }
-
-    private var headerBlurb: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Your courses")
-                .font(.system(size: 28, weight: .semibold, design: .rounded))
-                .foregroundStyle(StudydayTheme.ink)
-            Text("A clearer course — open for exams, quizzes, and assignments. Edit anytime if extraction missed something.")
-                .font(.system(size: 15, design: .rounded))
-                .foregroundStyle(StudydayTheme.muted)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, 4)
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            ZStack(alignment: .topTrailing) {
-                RoundedRectangle(cornerRadius: StudydayTheme.cornerIcon, style: .continuous)
-                    .fill(StudydayTheme.paperElevated)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: StudydayTheme.cornerIcon, style: .continuous)
-                            .stroke(StudydayTheme.borderSoft, lineWidth: 1)
-                    )
-                    .frame(width: 76, height: 76)
-                    .overlay(
-                        Image(systemName: "rectangle.stack.badge.plus")
-                            .font(.system(size: 28, weight: .medium))
-                            .foregroundStyle(StudydayTheme.ink)
-                    )
-                Circle()
-                    .fill(StudydayTheme.accent)
-                    .frame(width: 14, height: 14)
-                    .offset(x: 3, y: -3)
-            }
-            Text("No courses yet")
-                .font(.system(size: 22, weight: .semibold, design: .rounded))
-                .foregroundStyle(StudydayTheme.ink)
-            Text("Use AI Chat → + Add syllabus. Your syllabus, made manageable — then it shows up here.")
-                .font(.system(size: 15, design: .rounded))
-                .foregroundStyle(StudydayTheme.muted)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-            Button {
-                appModel.selectedTab = .chat
-            } label: {
-                Text("Open AI Chat")
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 22)
-                    .frame(minHeight: 48)
-                    .background(Capsule().fill(StudydayTheme.ink))
-            }
-            .buttonStyle(.plain)
-        }
-    }
-}
-
-private struct CourseRow: View {
-    let course: CourseItem
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(StudydayTheme.mist)
-                .frame(width: 48, height: 48)
-                .overlay(
-                    Text(shortCode)
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .foregroundStyle(StudydayTheme.iconBlue)
-                        .multilineTextAlignment(.center)
-                        .padding(4)
-                )
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(course.code)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(StudydayTheme.accent)
-                Text(course.title)
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .foregroundStyle(StudydayTheme.ink)
-                    .lineLimit(2)
-                Text("\(course.term) · \(course.instructor)")
-                    .font(.system(size: 12, design: .rounded))
-                    .foregroundStyle(StudydayTheme.muted)
-                HStack(spacing: 10) {
-                    metaChip(icon: "graduationcap", value: "\(course.exams.count) exams")
-                    metaChip(icon: "questionmark.circle", value: "\(course.quizzes.count) quizzes")
-                    metaChip(icon: "checklist", value: "\(course.assignments.count) tasks")
-                }
-                .padding(.top, 4)
-            }
-            Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(StudydayTheme.muted)
-                .padding(.top, 6)
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: StudydayTheme.cornerCard, style: .continuous)
-                .fill(StudydayTheme.paperElevated)
-                .overlay(
-                    RoundedRectangle(cornerRadius: StudydayTheme.cornerCard, style: .continuous)
-                        .stroke(StudydayTheme.border, lineWidth: 1)
-                )
-        )
-    }
-
-    private var shortCode: String {
-        let parts = course.code.split(separator: " ")
-        if parts.count >= 2 {
-            return String(parts[0].prefix(3)) + "\n" + String(parts[1].prefix(3))
-        }
-        return String(course.code.prefix(4))
-    }
-
-    private func metaChip(icon: String, value: String) -> some View {
-        Label(value, systemImage: icon)
-            .font(.system(size: 11, weight: .medium, design: .rounded))
-            .foregroundStyle(StudydayTheme.muted)
-            .labelStyle(.titleAndIcon)
-    }
-}
-
-#Preview {
-    HomeView()
-        .environmentObject(AppModel())
 }
