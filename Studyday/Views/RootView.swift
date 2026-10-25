@@ -24,7 +24,7 @@ struct OnboardingView: View {
                 StudydayBackground()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-                        Label("CampusMate", systemImage: "sparkles").font(.headline).foregroundStyle(StudydayTheme.accent)
+                        Label("Avelo", systemImage: "sparkles").font(.headline).foregroundStyle(StudydayTheme.accent)
                         Text(["Hey, let’s get to know you.", "What are you working toward?", "Make this buddy yours."][step])
                             .font(.system(size: 32, weight: .semibold, design: .rounded))
                         Text("\(step + 1) of 3 · Everything is optional")

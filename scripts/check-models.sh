@@ -16,5 +16,6 @@ swiftc -parse-as-library -target "$(uname -m)-apple-macosx13.0" \
   Studyday/Services/ServiceProtocols.swift \
   Studyday/Services/MockServices.swift \
   Studyday/Services/AppModel.swift \
+  Studyday/Services/GroqBuddyService.swift \
   Tests/CampusMateChecks.swift -o "$check_dir/campusmate-checks"
 "$check_dir/campusmate-checks"

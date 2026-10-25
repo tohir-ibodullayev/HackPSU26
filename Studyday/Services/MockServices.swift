@@ -115,7 +115,7 @@ struct MockBuddyService: BuddyServiceProtocol {
 /// No fake account creation: inject your teammate's provider to enable real email auth.
 struct UnconfiguredAuthService: AuthServiceProtocol {
     func signIn(email: String, password: String) async throws -> UserSession {
-        throw ServiceError.unavailable("Account sign-in isn’t connected yet. Use Try the demo to explore CampusMate.")
+        throw ServiceError.unavailable("Account sign-in isn’t connected yet. Use Try the demo to explore Avelo.")
     }
     func signUp(name: String, email: String, password: String) async throws -> UserSession {
         throw ServiceError.unavailable("Account creation isn’t connected yet. No account was created. Try the demo for now.")

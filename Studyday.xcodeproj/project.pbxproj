@@ -5,6 +5,8 @@
 	objectVersion = 56;
 	objects = {
 
+F10000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Studyday/Services/GroqBuddyService.swift"; sourceTree = SOURCE_ROOT; };
+F20000000000000000000001 = {isa = PBXBuildFile; fileRef = F10000000000000000000001; };
 /* Begin PBXBuildFile section */
 		C00000000000000000000001 /* StudydayApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000001 /* StudydayApp.swift */; };
 		C00000000000000000000002 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000002 /* Models.swift */; };
@@ -235,7 +237,7 @@
 				C00000000000000000000002 /* Models.swift in Sources */,
 				C00000000000000000000003 /* ServiceProtocols.swift in Sources */,
 				C00000000000000000000004 /* MockServices.swift in Sources */,
-				C00000000000000000000005 /* AppModel.swift in Sources */,
+				C00000000000000000000005 /* AppModel.swift in Sources */, F20000000000000000000001,
 				C00000000000000000000006 /* StudydayTheme.swift in Sources */,
 				C00000000000000000000007 /* RootView.swift in Sources */,
 				C00000000000000000000008 /* MainTabView.swift in Sources */,

@@ -75,6 +75,7 @@ struct ChatMessage: Identifiable, Equatable, Codable {
     var attachedFileName: String?
     var cards: [BuddyCard] = []
     var proactive: Bool = false
+    var responseSource: String? = nil
 }
 
 struct ExtractedSyllabus: Equatable, Codable {
@@ -213,10 +214,17 @@ struct BuddyContext {
     var profile: StudentProfile
     var courses: [CourseItem]
     var events: [CampusEvent]
+    var syntheticDemo = false
+    var cloudEnabled = false
+    var conversationID = UUID()
+    var summaries: [String: GradeSummary] = [:]
+    var recentProactive: ChatMessage? = nil
 }
 struct BuddyReply {
     var text: String
     var cards: [BuddyCard] = []
+    var source: String = "Demo reply · local"
+    var warning: String? = nil
 }
 protocol BuddyServiceProtocol {
     func reply(to text: String, context: BuddyContext) async throws -> BuddyReply
@@ -232,6 +240,7 @@ struct StudentState: Codable {
     var courses: [CourseItem]
     var messages: [ChatMessage]
     var notifiedCourseIDs: Set<String>
+    var cloudEnabled: Bool? = nil
 }
 struct LocalStudentStore: StudentStateStoring {
     // Demo storage is intentionally separate from future authenticated accounts.

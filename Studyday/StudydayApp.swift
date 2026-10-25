@@ -2,7 +2,7 @@ import SwiftUI
 
 @main
 struct StudydayApp: App {
-    @StateObject private var appModel = AppModel()
+    @StateObject private var appModel = AppModel(buddy: ConfiguredBuddyService())
 
     var body: some Scene {
         WindowGroup {

@@ -9,3 +9,12 @@ xcuserdata/
 *.dSYM.zip
 *.dSYM
 .DS_Store
+
+# Local backend configuration and Python artifacts
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/

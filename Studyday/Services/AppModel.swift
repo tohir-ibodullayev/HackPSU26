@@ -16,6 +16,8 @@ final class AppModel: ObservableObject {
     @Published var selectedTab: AppTab = .chat
     @Published var pendingSyllabusName: String?
     @Published var events: [CampusEvent] = []
+    @Published var useGroq = true
+    private var buddyTask: Task<Void, Never>?
     private let auth: AuthServiceProtocol
     private let extractor: SyllabusExtractorProtocol
     private let buddy: BuddyServiceProtocol
@@ -43,6 +45,7 @@ final class AppModel: ObservableObject {
             if let saved = try store.load() {
                 profile = saved.profile; courses = saved.courses; messages = saved.messages
                 notifiedCourseIDs = saved.notifiedCourseIDs
+                useGroq = saved.cloudEnabled ?? true
             } else { seedDemo() }
         } catch {
             storageError = "Saved demo data couldn’t be read. This session starts fresh; your saved data has not been overwritten."
@@ -76,7 +79,7 @@ final class AppModel: ObservableObject {
         catch { return error.localizedDescription }
     }
     func signOut() {
-        persist()
+        persist(); buddyTask?.cancel()
         generation = UUID(); session = nil; profile = StudentProfile()
         courses = []; messages = []; events = []; isChatBusy = false; pendingSyllabusName = nil; chatError = nil; authError = nil
         Task { await auth.signOut() }
@@ -85,10 +88,11 @@ final class AppModel: ObservableObject {
         profile.name = profile.name.trimmingCharacters(in: .whitespacesAndNewlines)
         profile.onboardingComplete = true
         persist()
-        append(role: .assistant, text: "Hey\(profile.name.isEmpty ? "" : ", " + profile.name)! I’m your CampusMate. Let’s make this semester feel a little lighter. What’s on your mind?", cards: profile.goal.isEmpty ? [] : [.goal(profile.goal)])
+        append(role: .assistant, text: "Hey\(profile.name.isEmpty ? "" : ", " + profile.name)! I’m your Avelo. Let’s make this semester feel a little lighter. What’s on your mind?", cards: profile.goal.isEmpty ? [] : [.goal(profile.goal)])
         evaluateRisks()
     }
     func saveProfile() { persist(); evaluateRisks() }
+    func saveBuddyMode() { persist() }
     func summary(_ course: CourseItem) -> GradeSummary { calculator.summarize(course) }
     func updateCourse(_ course: CourseItem) {
         guard let idx = courses.firstIndex(where: { $0.id == course.id }) else { return }
@@ -108,7 +112,7 @@ final class AppModel: ObservableObject {
               let item = courses[idx].assessments.firstIndex(where: { $0.id == assessmentID }) else { return false }
         courses[idx].assessments[item].score = score
         let course = courses[idx]
-        append(role: .assistant, text: "Updated your entered grades for \(course.code). Here’s the calculation with the available assessment weights.", cards: [.grade(courseID: course.id, code: course.code, result: summary(course))])
+        append(role: .assistant, text: "Updated your entered grades for \(course.code). Here’s the calculation with the available assessment weights.", cards: [.grade(courseID: course.id, code: course.code, result: summary(course))], responseSource: "Local grade calculator")
         persist(); evaluateRisks(); return true
     }
     func evaluateRisks(now: Date = Date()) {
@@ -136,12 +140,27 @@ final class AppModel: ObservableObject {
         guard isSignedIn, !text.isEmpty, !isChatBusy else { return }
         append(role: .user, text: text); isChatBusy = true; chatError = nil
         let token = generation
-        let context = BuddyContext(profile: profile, courses: courses, events: events)
-        Task {
+        let latestAssistant = messages.last(where: { $0.role == .assistant })
+        let refersToProgress = text.range(of: #"^(yes|no|can|could|what|how|that|it)\b|\b(grade|score|numbers|target|goal)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+        let recentRisk = messages.suffix(8).last { message in
+            message.proactive && message.cards.contains { card in
+                if case .grade(let id, _, _) = card, let course = courses.first(where: { $0.id == id }) { return summary(course).atRisk }
+                return false
+            }
+        }
+        let context = BuddyContext(profile: profile, courses: courses, events: events, syntheticDemo: isDemo,
+            cloudEnabled: useGroq, conversationID: generation,
+            summaries: Dictionary(uniqueKeysWithValues: courses.map { ($0.id, summary($0)) }),
+            recentProactive: latestAssistant?.proactive == true ? latestAssistant : (refersToProgress ? recentRisk : nil))
+        buddyTask = Task {
             do {
                 let reply = try await buddy.reply(to: text, context: context)
                 guard token == generation else { return }
-                append(role: .assistant, text: reply.text, cards: reply.cards)
+                chatError = reply.warning
+                append(role: .assistant, text: reply.text, cards: reply.cards, responseSource: reply.source)
+            } catch is CancellationError {
+                if token == generation { isChatBusy = false }
+                return
             } catch {
                 guard token == generation else { return }
                 chatError = error.localizedDescription
@@ -185,16 +204,16 @@ final class AppModel: ObservableObject {
         profile = StudentProfile(); courses = []; messages = []; notifiedCourseIDs = []
         welcome()
     }
-    private func append(role: ChatMessage.Role, text: String, cards: [BuddyCard] = [], proactive: Bool = false) {
-        messages.append(ChatMessage(id: UUID().uuidString, role: role, text: text, timestamp: Date(), cards: cards, proactive: proactive)); persist()
+    private func append(role: ChatMessage.Role, text: String, cards: [BuddyCard] = [], proactive: Bool = false, responseSource: String? = nil) {
+        messages.append(ChatMessage(id: UUID().uuidString, role: role, text: text, timestamp: Date(), cards: cards, proactive: proactive, responseSource: responseSource)); persist()
     }
     private func persist() {
         guard isDemo, storageError == nil else { return }
-        do { try store.save(StudentState(profile: profile, courses: courses, messages: messages, notifiedCourseIDs: notifiedCourseIDs)) }
+        do { try store.save(StudentState(profile: profile, courses: courses, messages: messages, notifiedCourseIDs: notifiedCourseIDs, cloudEnabled: useGroq)) }
         catch { storageError = "Your latest changes couldn’t be saved on this device." }
     }
     private func welcome() {
-        messages = [ChatMessage(id: UUID().uuidString, role: .assistant, text: "Hey! I’m your CampusMate. We can check your grades, plan a study session, or find something fun on campus.", timestamp: Date())]
+        messages = [ChatMessage(id: UUID().uuidString, role: .assistant, text: "Hey! I’m your Avelo. We can check your grades, plan a study session, or find something fun on campus.", timestamp: Date())]
     }
     private func seedDemo() {
         welcome()
